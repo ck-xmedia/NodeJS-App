@@ -65,6 +65,7 @@ fi
 
     stage('Deploy') {
       when {
+        beforeAgent false
         expression { return fileExists("package.json") }
       }
       steps {
