@@ -14,7 +14,7 @@ pipeline {
     NODE_VERSION = '18'
     LOG_DIR      = "${WORKSPACE}/logs"
     LOG_FILE     = "${WORKSPACE}/logs/app_${BUILD_NUMBER}.log"
-    PROJECT_TYPE = ''
+    PROJECT_TYPE = 'unknown'
   }
 
   stages {
@@ -206,9 +206,9 @@ if errorlevel 1 (
 
 echo [Deps] Installing Node dependencies...
 if exist package-lock.json (
-  npm ci
+  call npm.cmd ci
 ) else (
-  npm install --no-audit --no-fund
+  call npm.cmd install --no-audit --no-fund
 )
 if errorlevel 1 (
   echo [Deps][ERROR] npm install failed.
@@ -229,7 +229,7 @@ if errorlevel 1 (
   echo [Test] No test script defined; skipping.
 ) else (
   echo [Test] Running tests...
-  npm test
+  call npm.cmd test
   if errorlevel 1 exit /b 1
 )
 
@@ -378,7 +378,7 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr /R /C:":%APP_PORT% .*LISTENIN
 )
 
 echo [Deploy] Starting application in background on port %APP_PORT%...
-powershell -NoProfile -Command "$env:PORT=$env:APP_PORT; Start-Process -FilePath 'npm' -ArgumentList 'start' -NoNewWindow -RedirectStandardOutput '%LOG_FILE%' -RedirectStandardError '%LOG_FILE%'"
+powershell -NoProfile -Command "$env:PORT=$env:APP_PORT; $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','npm.cmd','start' -NoNewWindow -RedirectStandardOutput $env:LOG_FILE -RedirectStandardError $env:LOG_FILE -PassThru; if ($p) { Set-Content -Path (Join-Path $env:LOG_DIR 'app.pid') -Value $p.Id }"
 
 echo [Deploy] Verifying application startup...
 set STARTED=0
