@@ -224,7 +224,7 @@ if exist node_modules (
 )
 
 echo [Test] Checking for npm test script...
-findstr /I /C:"\"test\":" package.json >nul 2>&1
+node -e "process.exit(!((require('./package.json').scripts||{}).test))"
 if errorlevel 1 (
   echo [Test] No test script defined; skipping.
 ) else (
@@ -378,7 +378,7 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr /R /C:":%APP_PORT% .*LISTENIN
 )
 
 echo [Deploy] Starting application in background on port %APP_PORT%...
-start "" cmd /c "set PORT=%APP_PORT% && npm start >> "%LOG_FILE%" 2>&1"
+powershell -NoProfile -Command "$env:PORT=$env:APP_PORT; Start-Process -FilePath 'npm' -ArgumentList 'start' -NoNewWindow -RedirectStandardOutput '%LOG_FILE%' -RedirectStandardError '%LOG_FILE%'"
 
 echo [Deploy] Verifying application startup...
 set STARTED=0
