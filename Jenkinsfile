@@ -46,16 +46,33 @@ pipeline {
             echo "[Env] Installing nvm + Node ${NODE_VERSION}.x locally (no sudo)..."
             mkdir -p "${NVM_DIR}"
             if [ ! -s "${NVM_DIR}/nvm.sh" ]; then
-              if command -v curl >/dev/null 2>&1; then
+              echo "[Env] nvm not found at ${NVM_DIR}/nvm.sh; installing..."
+              if command -v git >/dev/null 2>&1; then
+                rm -rf "${NVM_DIR}.tmp" || true
+                git clone https://github.com/nvm-sh/nvm.git "${NVM_DIR}.tmp"
+                (cd "${NVM_DIR}.tmp" && git checkout "v0.39.7")
+                rm -rf "${NVM_DIR}" || true
+                mv "${NVM_DIR}.tmp" "${NVM_DIR}"
+              elif command -v curl >/dev/null 2>&1; then
+                export NVM_DIR="${NVM_DIR}"
                 curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
               elif command -v wget >/dev/null 2>&1; then
+                export NVM_DIR="${NVM_DIR}"
                 wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
               else
-                echo "[Env] Neither curl nor wget available to install nvm."
+                echo "[Env] Neither git, curl nor wget available to install nvm."
                 exit 2
               fi
             fi
-            . "${NVM_DIR}/nvm.sh"
+
+            if [ -s "${NVM_DIR}/nvm.sh" ]; then
+              . "${NVM_DIR}/nvm.sh"
+            else
+              echo "[Env] nvm.sh not found at ${NVM_DIR}/nvm.sh after installation."
+              ls -la "${NVM_DIR}" || true
+              exit 2
+            fi
+
             nvm install ${NODE_VERSION}
             nvm use ${NODE_VERSION}
             node -v
@@ -70,7 +87,6 @@ pipeline {
     stage('Install Dependencies') {
       steps {
         script {
-          // Detect project type by common dependency files
           if (fileExists('package.json')) {
             env.PROJECT_TYPE = 'node'
           } else if (fileExists('requirements.txt') || fileExists('pyproject.toml')) {
@@ -81,8 +97,6 @@ pipeline {
             env.PROJECT_TYPE = 'java-gradle'
           } else if (fileExists('go.mod')) {
             env.PROJECT_TYPE = 'go'
-          } else if (fileExists('Gemfile')) {
-            env.PROJECT_TYPE = 'ruby'
           } else {
             env.PROJECT_TYPE = 'unknown'
           }
@@ -92,11 +106,12 @@ pipeline {
           if (env.PROJECT_TYPE == 'node') {
             sh '''
               set -eu
-              # Ensure nvm context for Node commands if needed
               if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-                . "${NVM_DIR}/nvm.sh"
-                nvm install ${NODE_VERSION}
-                nvm use ${NODE_VERSION}
+                if [ -s "${NVM_DIR}/nvm.sh" ]; then
+                  . "${NVM_DIR}/nvm.sh"
+                  nvm install ${NODE_VERSION}
+                  nvm use ${NODE_VERSION}
+                fi
               fi
 
               echo "[Deps] Installing Node dependencies..."
@@ -110,7 +125,6 @@ pipeline {
               node -e "require('fs').accessSync('node_modules')"
               echo "[Deps] OK"
             '''
-            // Optional: run tests if defined
             sh '''
               set -eu
               echo "[Test] Checking for npm test script..."
@@ -201,10 +215,11 @@ pipeline {
               fi
 
               echo "[Deploy] Starting application with nohup on port ${APP_PORT}..."
-              # Ensure nvm context for Node commands if needed
               if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-                . "${NVM_DIR}/nvm.sh"
-                nvm use ${NODE_VERSION} >/dev/null
+                if [ -s "${NVM_DIR}/nvm.sh" ]; then
+                  . "${NVM_DIR}/nvm.sh"
+                  nvm use ${NODE_VERSION} >/dev/null
+                fi
               fi
 
               nohup env PORT="${APP_PORT}" npm start > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid"
@@ -212,7 +227,8 @@ pipeline {
 
               echo "[Deploy] Verifying application startup..."
               STARTED=0
-              for i in $(seq 1 30); do
+              i=1
+              while [ "$i" -le 30 ]; do
                 if command -v curl >/dev/null 2>&1; then
                   if curl -fsS "http://127.0.0.1:${APP_PORT}/ready" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
                     STARTED=1
@@ -227,6 +243,7 @@ pipeline {
                   echo "[Deploy] Neither curl nor wget available to perform healthcheck."
                   break
                 fi
+                i=$((i+1))
                 sleep 1
               done
 
@@ -274,7 +291,8 @@ pipeline {
 
               echo "[Deploy] Verifying application startup..."
               STARTED=0
-              for i in $(seq 1 30); do
+              i=1
+              while [ "$i" -le 30 ]; do
                 if command -v curl >/dev/null 2>&1; then
                   if curl -fsS "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
                     STARTED=1
@@ -289,6 +307,7 @@ pipeline {
                   echo "[Deploy] Neither curl nor wget available to perform healthcheck."
                   break
                 fi
+                i=$((i+1))
                 sleep 1
               done
               if [ "$STARTED" -ne 1 ]; then
@@ -330,7 +349,8 @@ pipeline {
 
               echo "[Deploy] Verifying application startup..."
               STARTED=0
-              for i in $(seq 1 30); do
+              i=1
+              while [ "$i" -le 30 ]; do
                 if command -v curl >/dev/null 2>&1; then
                   if curl -fsS "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
                     STARTED=1
@@ -345,6 +365,7 @@ pipeline {
                   echo "[Deploy] Neither curl nor wget available to perform healthcheck."
                   break
                 fi
+                i=$((i+1))
                 sleep 1
               done
               if [ "$STARTED" -ne 1 ]; then
@@ -384,7 +405,8 @@ pipeline {
 
               echo "[Deploy] Verifying application startup..."
               STARTED=0
-              for i in $(seq 1 30); do
+              i=1
+              while [ "$i" -le 30 ]; do
                 if command -v curl >/dev/null 2>&1; then
                   if curl -fsS "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
                     STARTED=1
@@ -399,6 +421,7 @@ pipeline {
                   echo "[Deploy] Neither curl nor wget available to perform healthcheck."
                   break
                 fi
+                i=$((i+1))
                 sleep 1
               done
               if [ "$STARTED" -ne 1 ]; then
