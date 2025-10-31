@@ -46,7 +46,14 @@ pipeline {
             echo "[Env] Installing nvm + Node ${NODE_VERSION}.x locally (no sudo)..."
             mkdir -p "${NVM_DIR}"
             if [ ! -s "${NVM_DIR}/nvm.sh" ]; then
-              curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+              if command -v curl >/dev/null 2>&1; then
+                curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+              elif command -v wget >/dev/null 2>&1; then
+                wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+              else
+                echo "[Env] Neither curl nor wget available to install nvm."
+                exit 2
+              fi
             fi
             . "${NVM_DIR}/nvm.sh"
             nvm install ${NODE_VERSION}
@@ -107,9 +114,9 @@ pipeline {
             sh '''
               set -eu
               echo "[Test] Checking for npm test script..."
-              if npm run | grep -E -q " test\\b"; then
+              if node -e "process.exit(!((require('./package.json').scripts||{}).test))"; then
                 echo "[Test] Running tests..."
-                npm test
+                npm test || npm run test
               else
                 echo "[Test] No test script defined; skipping."
               fi
@@ -187,7 +194,10 @@ pipeline {
                 fuser -k "${APP_PORT}"/tcp || true
               fi
               if command -v lsof >/dev/null 2>&1; then
-                lsof -ti :"${APP_PORT}" | xargs -r kill -9 || true
+                PIDS="$(lsof -ti :"${APP_PORT}" || true)"
+                if [ -n "$PIDS" ]; then
+                  echo "$PIDS" | xargs kill -9 || true
+                fi
               fi
 
               echo "[Deploy] Starting application with nohup on port ${APP_PORT}..."
@@ -243,7 +253,10 @@ pipeline {
                 fuser -k "${APP_PORT}"/tcp || true
               fi
               if command -v lsof >/dev/null 2>&1; then
-                lsof -ti :"${APP_PORT}" | xargs -r kill -9 || true
+                PIDS="$(lsof -ti :"${APP_PORT}" || true)"
+                if [ -n "$PIDS" ]; then
+                  echo "$PIDS" | xargs kill -9 || true
+                fi
               fi
 
               . "${VENV_DIR}/bin/activate" || true
@@ -297,7 +310,10 @@ pipeline {
                 fuser -k "${APP_PORT}"/tcp || true
               fi
               if command -v lsof >/dev/null 2>&1; then
-                lsof -ti :"${APP_PORT}" | xargs -r kill -9 || true
+                PIDS="$(lsof -ti :"${APP_PORT}" || true)"
+                if [ -n "$PIDS" ]; then
+                  echo "$PIDS" | xargs kill -9 || true
+                fi
               fi
 
               JAR_FILE="$(ls -1 target/*.jar 2>/dev/null || true)"
@@ -350,7 +366,10 @@ pipeline {
                 fuser -k "${APP_PORT}"/tcp || true
               fi
               if command -v lsof >/dev/null 2>&1; then
-                lsof -ti :"${APP_PORT}" | xargs -r kill -9 || true
+                PIDS="$(lsof -ti :"${APP_PORT}" || true)"
+                if [ -n "$PIDS" ]; then
+                  echo "$PIDS" | xargs kill -9 || true
+                fi
               fi
 
               APP_BIN="./app"
