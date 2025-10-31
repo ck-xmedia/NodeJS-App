@@ -1,9 +1,5 @@
 pipeline {
   agent { label 'linux' }
-  tools {
-    // configure based on available Jenkins tools
-    nodejs 'NodeJS'
-  }
   environment {
     REPO_URL    = 'https://github.com/ck-xmedia/NodeJS-App.git'
     BRANCH_NAME = 'jenkins-automation-22'
