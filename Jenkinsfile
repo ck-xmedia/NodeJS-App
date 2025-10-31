@@ -114,7 +114,7 @@ pipeline {
           } else {
             bat '''
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 echo [Env] Workspace: %WORKSPACE%
 echo [Env] Preparing directories...
@@ -196,7 +196,7 @@ endlocal
             } else {
               bat '''
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 where node >nul 2>nul && where npm >nul 2>nul
 if errorlevel 1 (
@@ -224,7 +224,7 @@ if exist node_modules (
 )
 
 echo [Test] Checking for npm test script...
-node -e "process.exit(!((require('./package.json').scripts||{}).test))"
+powershell -NoProfile -Command "$p = Get-Content -Raw -ErrorAction SilentlyContinue 'package.json' | ConvertFrom-Json; if ($p -and $p.scripts -and $p.scripts.PSObject.Properties.Name -contains 'test' -and $p.scripts.test) { exit 0 } else { exit 1 }"
 if errorlevel 1 (
   echo [Test] No test script defined; skipping.
 ) else (
@@ -365,7 +365,7 @@ endlocal
             } else {
               bat '''
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 echo [Deploy] Ensuring logs directory exists...
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" 2>nul
