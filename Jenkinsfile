@@ -2,14 +2,13 @@ pipeline {
   agent { label 'linux' }
 
   tools {
-    // configure based on available Jenkins tools
   }
 
   environment {
     REPO_URL    = 'https://github.com/ck-xmedia/NodeJS-App.git'
     BRANCH_NAME = 'jenkins-automation-23'
     APP_PORT    = '8080'
-    LOG_DIR     = "${WORKSPACE}/logs"
+    LOG_DIR     = "${env.WORKSPACE}/logs"
     APP_NAME    = 'nodejs-app'
   }
 
