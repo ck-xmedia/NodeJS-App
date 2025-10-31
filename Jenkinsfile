@@ -35,7 +35,7 @@ pipeline {
           def nodeToolCandidates = [
             'NodeJS_18','Node18','node18','NodeJS','nodejs','Node 18','Node'
           ]
-          for (def t : nodeToolCandidates) {
+          for (def t in nodeToolCandidates) {
             try {
               def home = tool t
               if (home) {
@@ -378,7 +378,7 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr /R /C:":%APP_PORT% .*LISTENIN
 )
 
 echo [Deploy] Starting application in background on port %APP_PORT%...
-start "" cmd /c "set PORT=%APP_PORT% && npm start >> ""%LOG_FILE%"" 2>&1"
+start "" cmd /c "set PORT=%APP_PORT% && npm start >> "%LOG_FILE%" 2>&1"
 
 echo [Deploy] Verifying application startup...
 set STARTED=0
