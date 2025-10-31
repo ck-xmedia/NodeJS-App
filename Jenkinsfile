@@ -31,7 +31,7 @@ pipeline {
     stage('Environment Setup') {
       steps {
         sh '''
-          set -euo pipefail
+          set -eu
 
           echo "[Env] Workspace: $WORKSPACE"
           echo "[Env] Preparing directories..."
@@ -84,7 +84,7 @@ pipeline {
 
           if (env.PROJECT_TYPE == 'node') {
             sh '''
-              set -euo pipefail
+              set -eu
               # Ensure nvm context for Node commands if needed
               if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
                 . "${NVM_DIR}/nvm.sh"
@@ -105,7 +105,7 @@ pipeline {
             '''
             // Optional: run tests if defined
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Test] Checking for npm test script..."
               if npm run | grep -E -q " test\\b"; then
                 echo "[Test] Running tests..."
@@ -116,7 +116,7 @@ pipeline {
             '''
           } else if (env.PROJECT_TYPE == 'python') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deps] Python project detected."
               python3 -V || true
               python -V || true
@@ -141,14 +141,14 @@ pipeline {
             '''
           } else if (env.PROJECT_TYPE == 'java-maven') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deps] Maven project detected."
               mvn -v
               mvn -B -e -U clean package
             '''
           } else if (env.PROJECT_TYPE == 'java-gradle') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deps] Gradle project detected."
               if [ -x "./gradlew" ]; then
                 ./gradlew clean build --no-daemon
@@ -158,7 +158,7 @@ pipeline {
             '''
           } else if (env.PROJECT_TYPE == 'go') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deps] Go project detected."
               go version
               go mod download
@@ -176,7 +176,7 @@ pipeline {
         script {
           if (env.PROJECT_TYPE == 'node') {
             sh '''
-              set -euo pipefail
+              set -eu
 
               echo "[Deploy] Ensuring logs directory exists..."
               mkdir -p "${LOG_DIR}"
@@ -233,7 +233,7 @@ pipeline {
             '''
           } else if (env.PROJECT_TYPE == 'python') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deploy] Python app deployment selected."
               mkdir -p "${LOG_DIR}"
               rm -f "${LOG_FILE}"
@@ -287,7 +287,7 @@ pipeline {
             '''
           } else if (env.PROJECT_TYPE == 'java-maven' || env.PROJECT_TYPE == 'java-gradle') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deploy] Java app deployment selected."
               mkdir -p "${LOG_DIR}"
               rm -f "${LOG_FILE}"
@@ -340,7 +340,7 @@ pipeline {
             '''
           } else if (env.PROJECT_TYPE == 'go') {
             sh '''
-              set -euo pipefail
+              set -eu
               echo "[Deploy] Go app deployment selected."
               mkdir -p "${LOG_DIR}"
               rm -f "${LOG_FILE}"
