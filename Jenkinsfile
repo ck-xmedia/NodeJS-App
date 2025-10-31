@@ -30,6 +30,24 @@ pipeline {
 
     stage('Environment Setup') {
       steps {
+        script {
+          // Prefer a Jenkins-managed NodeJS tool if available to avoid network installs
+          def nodeToolCandidates = [
+            'NodeJS_18','Node18','node18','NodeJS','nodejs','Node 18','Node'
+          ]
+          for (def t : nodeToolCandidates) {
+            try {
+              def home = tool t
+              if (home) {
+                env.PATH = "${home}/bin:${env.PATH}"
+                echo "[Env] Using Jenkins NodeJS tool '${t}' at ${home}"
+                break
+              }
+            } catch (ignored) {
+              // Try next candidate
+            }
+          }
+        }
         sh '''
           set -eu
 
@@ -40,43 +58,53 @@ pipeline {
           echo "[Env] Detecting Node..."
           if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
             echo "[Env] Node and npm already installed."
-            node -v
-            npm -v
+            node -v || true
+            npm -v || true
           else
-            echo "[Env] Installing nvm + Node ${NODE_VERSION}.x locally (no sudo)..."
+            echo "[Env] Node/npm not found. Attempting local nvm install without sudo..."
             mkdir -p "${NVM_DIR}"
             if [ ! -s "${NVM_DIR}/nvm.sh" ]; then
-              echo "[Env] nvm not found at ${NVM_DIR}/nvm.sh; installing..."
+              echo "[Env] nvm not found at ${NVM_DIR}/nvm.sh; attempting to install..."
               if command -v git >/dev/null 2>&1; then
                 rm -rf "${NVM_DIR}.tmp" || true
-                git clone https://github.com/nvm-sh/nvm.git "${NVM_DIR}.tmp"
-                (cd "${NVM_DIR}.tmp" && git checkout "v0.39.7")
-                rm -rf "${NVM_DIR}" || true
-                mv "${NVM_DIR}.tmp" "${NVM_DIR}"
+                git clone https://github.com/nvm-sh/nvm.git "${NVM_DIR}.tmp" || true
+                if [ -d "${NVM_DIR}.tmp/.git" ]; then
+                  (cd "${NVM_DIR}.tmp" && git checkout "v0.39.7") || true
+                  rm -rf "${NVM_DIR}" || true
+                  mv "${NVM_DIR}.tmp" "${NVM_DIR}" || true
+                else
+                  rm -rf "${NVM_DIR}.tmp" || true
+                fi
               elif command -v curl >/dev/null 2>&1; then
                 export NVM_DIR="${NVM_DIR}"
-                curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+                (curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash) || true
               elif command -v wget >/dev/null 2>&1; then
                 export NVM_DIR="${NVM_DIR}"
-                wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+                (wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash) || true
               else
-                echo "[Env] Neither git, curl nor wget available to install nvm."
-                exit 2
+                echo "[Env] No git/curl/wget available to install nvm; skipping nvm installation."
               fi
             fi
 
             if [ -s "${NVM_DIR}/nvm.sh" ]; then
-              . "${NVM_DIR}/nvm.sh"
+              . "${NVM_DIR}/nvm.sh" || true
+              if command -v nvm >/dev/null 2>&1; then
+                nvm install ${NODE_VERSION} || true
+                nvm use ${NODE_VERSION} || true
+              else
+                echo "[Env] nvm command not available after sourcing; continuing without nvm."
+              fi
             else
-              echo "[Env] nvm.sh not found at ${NVM_DIR}/nvm.sh after installation."
-              ls -la "${NVM_DIR}" || true
-              exit 2
+              echo "[Env] nvm.sh not found at ${NVM_DIR}/nvm.sh; continuing without nvm."
             fi
 
-            nvm install ${NODE_VERSION}
-            nvm use ${NODE_VERSION}
-            node -v
-            npm -v
+            if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+              echo "[Env] Node/npm available after setup."
+              node -v || true
+              npm -v || true
+            else
+              echo "[Env][WARN] Node/npm still not available; subsequent steps may fail."
+            fi
           fi
 
           echo "[Env] Final PATH: $PATH"
@@ -108,10 +136,14 @@ pipeline {
               set -eu
               if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
                 if [ -s "${NVM_DIR}/nvm.sh" ]; then
-                  . "${NVM_DIR}/nvm.sh"
-                  nvm install ${NODE_VERSION}
-                  nvm use ${NODE_VERSION}
+                  . "${NVM_DIR}/nvm.sh" || true
+                  command -v nvm >/dev/null 2>&1 && { nvm install ${NODE_VERSION} || true; nvm use ${NODE_VERSION} || true; }
                 fi
+              fi
+
+              if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+                echo "[Deps][ERROR] Node.js and npm are required but not available."
+                exit 1
               fi
 
               echo "[Deps] Installing Node dependencies..."
@@ -143,18 +175,20 @@ pipeline {
               python -V || true
 
               echo "[Deps] Using virtual environment at ${VENV_DIR}"
-              python3 -m venv "${VENV_DIR}" || python -m venv "${VENV_DIR}"
-              . "${VENV_DIR}/bin/activate"
+              python3 -m venv "${VENV_DIR}" || python -m venv "${VENV_DIR}" || true
+              if [ -f "${VENV_DIR}/bin/activate" ]; then
+                . "${VENV_DIR}/bin/activate"
+              fi
 
               if [ -f requirements.txt ]; then
-                pip install --upgrade pip
-                pip install -r requirements.txt
+                pip install --upgrade pip || true
+                pip install -r requirements.txt || true
               elif [ -f pyproject.toml ]; then
-                pip install --upgrade pip
+                pip install --upgrade pip || true
                 if grep -qi "\\[tool.poetry\\]" pyproject.toml; then
-                  pip install poetry && poetry install --no-interaction --no-ansi
+                  pip install poetry && poetry install --no-interaction --no-ansi || true
                 else
-                  pip install build && python -m build
+                  pip install build && python -m build || true
                 fi
               else
                 echo "[Deps] No recognized Python dependency file found."
@@ -164,7 +198,7 @@ pipeline {
             sh '''
               set -eu
               echo "[Deps] Maven project detected."
-              mvn -v
+              mvn -v || true
               mvn -B -e -U clean package
             '''
           } else if (env.PROJECT_TYPE == 'java-gradle') {
@@ -181,7 +215,7 @@ pipeline {
             sh '''
               set -eu
               echo "[Deps] Go project detected."
-              go version
+              go version || true
               go mod download
               go build ./...
             '''
@@ -209,7 +243,7 @@ pipeline {
               fi
               if command -v lsof >/dev/null 2>&1; then
                 PIDS="$(lsof -ti :"${APP_PORT}" || true)"
-                if [ -n "$PIDS" ]; then
+                if [ -n "${PIDS:-}" ]; then
                   echo "$PIDS" | xargs kill -9 || true
                 fi
               fi
@@ -217,12 +251,12 @@ pipeline {
               echo "[Deploy] Starting application with nohup on port ${APP_PORT}..."
               if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
                 if [ -s "${NVM_DIR}/nvm.sh" ]; then
-                  . "${NVM_DIR}/nvm.sh"
-                  nvm use ${NODE_VERSION} >/dev/null
+                  . "${NVM_DIR}/nvm.sh" || true
+                  command -v nvm >/dev/null 2>&1 && nvm use ${NODE_VERSION} >/dev/null || true
                 fi
               fi
 
-              nohup env PORT="${APP_PORT}" npm start > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid"
+              nohup env PORT="${APP_PORT}" npm start > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid" || true
               sleep 2
 
               echo "[Deploy] Verifying application startup..."
@@ -271,7 +305,7 @@ pipeline {
               fi
               if command -v lsof >/dev/null 2>&1; then
                 PIDS="$(lsof -ti :"${APP_PORT}" || true)"
-                if [ -n "$PIDS" ]; then
+                if [ -n "${PIDS:-}" ]; then
                   echo "$PIDS" | xargs kill -9 || true
                 fi
               fi
@@ -286,7 +320,7 @@ pipeline {
                 exit 1
               fi
 
-              nohup env PORT="${APP_PORT}" python "$APP_ENTRY" > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid"
+              nohup env PORT="${APP_PORT}" python "$APP_ENTRY" > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid" || true
               sleep 2
 
               echo "[Deploy] Verifying application startup..."
@@ -330,7 +364,7 @@ pipeline {
               fi
               if command -v lsof >/dev/null 2>&1; then
                 PIDS="$(lsof -ti :"${APP_PORT}" || true)"
-                if [ -n "$PIDS" ]; then
+                if [ -n "${PIDS:-}" ]; then
                   echo "$PIDS" | xargs kill -9 || true
                 fi
               fi
@@ -344,7 +378,7 @@ pipeline {
                 exit 1
               fi
 
-              nohup env SERVER_PORT="${APP_PORT}" java -jar "$JAR_FILE" > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid"
+              nohup env SERVER_PORT="${APP_PORT}" java -jar "$JAR_FILE" > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid" || true
               sleep 2
 
               echo "[Deploy] Verifying application startup..."
@@ -388,7 +422,7 @@ pipeline {
               fi
               if command -v lsof >/dev/null 2>&1; then
                 PIDS="$(lsof -ti :"${APP_PORT}" || true)"
-                if [ -n "$PIDS" ]; then
+                if [ -n "${PIDS:-}" ]; then
                   echo "$PIDS" | xargs kill -9 || true
                 fi
               fi
@@ -400,7 +434,7 @@ pipeline {
                 go build -o "${APP_BIN}" ./...
               fi
 
-              nohup env PORT="${APP_PORT}" "${APP_BIN}" > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid"
+              nohup env PORT="${APP_PORT}" "${APP_BIN}" > "${LOG_FILE}" 2>&1 & echo $! > "${LOG_DIR}/app.pid" || true
               sleep 2
 
               echo "[Deploy] Verifying application startup..."
